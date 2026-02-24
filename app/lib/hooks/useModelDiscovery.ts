@@ -3,7 +3,7 @@ import { PROVIDER_LIST, type ModelInfo, type ProviderInfo } from '~/utils/consta
 
 async function getOllamaModels(): Promise<ModelInfo[]> {
   try {
-    const baseUrl = import.meta.env.VITE_OLLAMA_API_BASE_URL || 'http://localhost:11434';
+    const baseUrl = import.meta.env.VITE_OLLAMA_API_BASE_URL || 'http://127.0.0.1:11434';
     const response = await fetch(`${baseUrl}/api/tags`);
 
     if (!response.ok) {

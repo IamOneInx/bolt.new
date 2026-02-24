@@ -2,7 +2,7 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createMistral } from '@ai-sdk/mistral';
-import { ollama } from 'ollama-ai-provider';
+import { createOllama } from 'ollama-ai-provider'; // kept for future use
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { getAPIKey, getBaseURL } from './api-key';
 
@@ -69,13 +69,16 @@ export function getOpenRouterModel(apiKey: string, model: string) {
 }
 
 export function getOllamaModel(baseURL: string, model: string) {
-  const ollamaModel = ollama(model, { numCtx: 32768 });
-  (ollamaModel as any).config = { ...(ollamaModel as any).config, baseURL: `${baseURL}/api` };
-  return ollamaModel;
+  // Use Ollama's OpenAI-compatible endpoint — more reliable than the native provider
+  const openai = createOpenAI({
+    baseURL: `${baseURL}/v1`,
+    apiKey: 'ollama', // Ollama ignores the key but the SDK requires a value
+  });
+  return openai(model);
 }
 
 export function getLMStudioModel(baseURL: string, model: string) {
-  const lmstudio = createOpenAI({ baseURL: `${baseURL}/v1`, apiKey: '' });
+  const lmstudio = createOpenAI({ baseURL: `${baseURL}/v1`, apiKey: 'lmstudio' });
   return lmstudio(model);
 }
 

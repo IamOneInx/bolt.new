@@ -3,7 +3,7 @@ import { getAPIKey } from '~/lib/.server/llm/api-key';
 import { getModel } from '~/lib/.server/llm/model';
 import { MAX_TOKENS } from './constants';
 import { getSystemPrompt } from './prompts';
-import { DEFAULT_MODEL, DEFAULT_PROVIDER, MODEL_REGEX, PROVIDER_REGEX, MODEL_LIST } from '~/utils/constants';
+import { DEFAULT_MODEL, DEFAULT_PROVIDER, MODEL_REGEX, PROVIDER_REGEX } from '~/utils/constants';
 
 interface ToolResult<Name extends string, Args, Result> {
   toolCallId: string;
@@ -50,7 +50,7 @@ export function streamText(
     if (message.role === 'user') {
       const { model, provider, content } = extractPropertiesFromMessage(message);
 
-      if (MODEL_LIST.find((m) => m.name === model)) {
+      if (model) {
         currentModel = model;
       }
 
