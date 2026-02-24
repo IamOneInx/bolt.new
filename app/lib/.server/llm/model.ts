@@ -1,9 +1,112 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
+import { createOpenAI } from '@ai-sdk/openai';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createMistral } from '@ai-sdk/mistral';
+import { ollama } from 'ollama-ai-provider';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider';
+import { getAPIKey, getBaseURL } from './api-key';
 
-export function getAnthropicModel(apiKey: string) {
-  const anthropic = createAnthropic({
+export function getAnthropicModel(apiKey: string, model: string) {
+  const anthropic = createAnthropic({ apiKey });
+  return anthropic(model);
+}
+
+export function getOpenAIModel(apiKey: string, model: string) {
+  const openai = createOpenAI({ apiKey });
+  return openai(model);
+}
+
+export function getOpenAILikeModel(baseURL: string, apiKey: string, model: string) {
+  const openai = createOpenAI({ baseURL, apiKey });
+  return openai(model);
+}
+
+export function getGoogleModel(apiKey: string, model: string) {
+  const google = createGoogleGenerativeAI({ apiKey });
+  return google(model);
+}
+
+export function getMistralModel(apiKey: string, model: string) {
+  const mistral = createMistral({ apiKey });
+  return mistral(model);
+}
+
+export function getGroqModel(apiKey: string, model: string) {
+  const openai = createOpenAI({
+    baseURL: 'https://api.groq.com/openai/v1',
     apiKey,
   });
+  return openai(model);
+}
 
-  return anthropic('claude-3-5-sonnet-20240620');
+export function getDeepseekModel(apiKey: string, model: string) {
+  const openai = createOpenAI({
+    baseURL: 'https://api.deepseek.com/beta',
+    apiKey,
+  });
+  return openai(model);
+}
+
+export function getHuggingFaceModel(apiKey: string, model: string) {
+  const openai = createOpenAI({
+    baseURL: 'https://api-inference.huggingface.co/v1/',
+    apiKey,
+  });
+  return openai(model);
+}
+
+export function getXAIModel(apiKey: string, model: string) {
+  const openai = createOpenAI({
+    baseURL: 'https://api.x.ai/v1',
+    apiKey,
+  });
+  return openai(model);
+}
+
+export function getOpenRouterModel(apiKey: string, model: string) {
+  const openRouter = createOpenRouter({ apiKey });
+  return openRouter.chat(model);
+}
+
+export function getOllamaModel(baseURL: string, model: string) {
+  const ollamaModel = ollama(model, { numCtx: 32768 });
+  (ollamaModel as any).config = { ...(ollamaModel as any).config, baseURL: `${baseURL}/api` };
+  return ollamaModel;
+}
+
+export function getLMStudioModel(baseURL: string, model: string) {
+  const lmstudio = createOpenAI({ baseURL: `${baseURL}/v1`, apiKey: '' });
+  return lmstudio(model);
+}
+
+export function getModel(provider: string, model: string, env: Env, apiKeys?: Record<string, string>) {
+  const apiKey = getAPIKey(env, provider, apiKeys);
+  const baseURL = getBaseURL(env, provider);
+
+  switch (provider) {
+    case 'Anthropic':
+      return getAnthropicModel(apiKey, model);
+    case 'OpenAI':
+      return getOpenAIModel(apiKey, model);
+    case 'Google':
+      return getGoogleModel(apiKey, model);
+    case 'Mistral':
+      return getMistralModel(apiKey, model);
+    case 'Groq':
+      return getGroqModel(apiKey, model);
+    case 'Deepseek':
+      return getDeepseekModel(apiKey, model);
+    case 'HuggingFace':
+      return getHuggingFaceModel(apiKey, model);
+    case 'xAI':
+      return getXAIModel(apiKey, model);
+    case 'OpenRouter':
+      return getOpenRouterModel(apiKey, model);
+    case 'OpenAILike':
+      return getOpenAILikeModel(baseURL, apiKey, model);
+    case 'LMStudio':
+      return getLMStudioModel(baseURL, model);
+    default:
+      return getOllamaModel(baseURL, model);
+  }
 }

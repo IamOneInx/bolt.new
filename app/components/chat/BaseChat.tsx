@@ -5,6 +5,8 @@ import { Menu } from '~/components/sidebar/Menu.client';
 import { IconButton } from '~/components/ui/IconButton';
 import { Workbench } from '~/components/workbench/Workbench.client';
 import { classNames } from '~/utils/classNames';
+import { PROVIDER_LIST, type ModelInfo, type ProviderInfo } from '~/utils/constants';
+import type { TokenUsage } from '~/lib/stores/token-usage';
 import { Messages } from './Messages.client';
 import { SendButton } from './SendButton.client';
 
@@ -25,6 +27,13 @@ interface BaseChatProps {
   sendMessage?: (event: React.UIEvent, messageInput?: string) => void;
   handleInputChange?: (event: React.ChangeEvent<HTMLTextAreaElement>) => void;
   enhancePrompt?: () => void;
+  selectedProvider?: string;
+  selectedModel?: string;
+  onProviderChange?: (provider: string) => void;
+  onModelChange?: (model: string) => void;
+  tokenUsage?: TokenUsage;
+  providerList?: ProviderInfo[];
+  discovering?: boolean;
 }
 
 const EXAMPLE_PROMPTS = [
@@ -54,10 +63,31 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       handleInputChange,
       enhancePrompt,
       handleStop,
+      selectedProvider = PROVIDER_LIST[0].name,
+      selectedModel = PROVIDER_LIST[0].staticModels[0]?.name ?? '',
+      onProviderChange,
+      onModelChange,
+      tokenUsage,
+      providerList = PROVIDER_LIST,
+      discovering = false,
     },
     ref,
   ) => {
     const TEXTAREA_MAX_HEIGHT = chatStarted ? 400 : 200;
+
+    const currentProviderModels =
+      providerList.find((p) => p.name === selectedProvider)?.staticModels ?? [];
+
+    const handleProviderChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+      const newProvider = e.target.value;
+      onProviderChange?.(newProvider);
+
+      // Auto-select first model of new provider
+      const firstModel = PROVIDER_LIST.find((p) => p.name === newProvider)?.staticModels[0];
+      if (firstModel) {
+        onModelChange?.(firstModel.name);
+      }
+    };
 
     return (
       <div
@@ -149,8 +179,8 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                       />
                     )}
                   </ClientOnly>
-                  <div className="flex justify-between text-sm p-4 pt-2">
-                    <div className="flex gap-1 items-center">
+                  <div className="flex justify-between items-center text-sm p-4 pt-2 gap-2">
+                    <div className="flex gap-2 items-center flex-wrap">
                       <IconButton
                         title="Enhance prompt"
                         disabled={input.length === 0 || enhancingPrompt}
@@ -173,12 +203,58 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                           </>
                         )}
                       </IconButton>
+
+                      {/* Provider selector */}
+                      <select
+                        value={selectedProvider}
+                        onChange={handleProviderChange}
+                        className="text-xs bg-bolt-elements-prompt-background border border-bolt-elements-borderColor rounded px-2 py-1 text-bolt-elements-textPrimary focus:outline-none cursor-pointer"
+                        title="Select AI provider"
+                      >
+                        {providerList.map((provider) => (
+                          <option key={provider.name} value={provider.name}>
+                            {provider.name}
+                            {['Ollama', 'LMStudio', 'OpenAILike'].includes(provider.name) &&
+                              (discovering
+                                ? ' (scanning...)'
+                                : provider.staticModels.length === 0
+                                  ? ' (none found)'
+                                  : ` (${provider.staticModels.length})`)}
+                          </option>
+                        ))}
+                      </select>
+
+                      {/* Model selector */}
+                      {currentProviderModels.length > 0 && (
+                        <select
+                          value={selectedModel}
+                          onChange={(e) => onModelChange?.(e.target.value)}
+                          className="text-xs bg-bolt-elements-prompt-background border border-bolt-elements-borderColor rounded px-2 py-1 text-bolt-elements-textPrimary focus:outline-none cursor-pointer max-w-[180px]"
+                          title="Select model"
+                        >
+                          {currentProviderModels.map((model: ModelInfo) => (
+                            <option key={model.name} value={model.name}>
+                              {model.label}
+                            </option>
+                          ))}
+                        </select>
+                      )}
                     </div>
-                    {input.length > 3 ? (
-                      <div className="text-xs text-bolt-elements-textTertiary">
-                        Use <kbd className="kdb">Shift</kbd> + <kbd className="kdb">Return</kbd> for a new line
-                      </div>
-                    ) : null}
+
+                    <div className="flex items-center gap-3">
+                      {/* Token usage display */}
+                      {tokenUsage && tokenUsage.totalTokens > 0 && (
+                        <div className="text-xs text-bolt-elements-textTertiary" title="Estimated token usage this session">
+                          ~{tokenUsage.totalTokens.toLocaleString()} tokens
+                        </div>
+                      )}
+
+                      {input.length > 3 && (
+                        <div className="text-xs text-bolt-elements-textTertiary">
+                          Use <kbd className="kdb">Shift</kbd> + <kbd className="kdb">Return</kbd> for a new line
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div className="bg-bolt-elements-background-depth-1 pb-6">{/* Ghost Element */}</div>

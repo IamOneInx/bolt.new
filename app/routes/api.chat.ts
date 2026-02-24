@@ -9,20 +9,20 @@ export async function action(args: ActionFunctionArgs) {
 }
 
 async function chatAction({ context, request }: ActionFunctionArgs) {
-  const { messages } = await request.json<{ messages: Messages }>();
+  const { messages, apiKeys } = await request.json<{ messages: Messages; apiKeys?: Record<string, string> }>();
 
   const stream = new SwitchableStream();
 
   try {
     const options: StreamingOptions = {
       toolChoice: 'none',
-      onFinish: async ({ text: content, finishReason }) => {
+      onFinish: async ({ text: content, finishReason, usage }) => {
         if (finishReason !== 'length') {
           return stream.close();
         }
 
         if (stream.switches >= MAX_RESPONSE_SEGMENTS) {
-          throw Error('Cannot continue message: Maximum segments reached');
+          throw new Error(`Cannot continue message: Maximum segments (${MAX_RESPONSE_SEGMENTS}) reached`);
         }
 
         const switchesLeft = MAX_RESPONSE_SEGMENTS - stream.switches;
@@ -32,26 +32,44 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
         messages.push({ role: 'assistant', content });
         messages.push({ role: 'user', content: CONTINUE_PROMPT });
 
-        const result = await streamText(messages, context.cloudflare.env, options);
+        const result = await streamText(messages, context.cloudflare.env, options, apiKeys);
 
         return stream.switchSource(result.toAIStream());
       },
     };
 
-    const result = await streamText(messages, context.cloudflare.env, options);
+    const result = await streamText(messages, context.cloudflare.env, options, apiKeys);
 
     stream.switchSource(result.toAIStream());
 
     return new Response(stream.readable, {
       status: 200,
       headers: {
-        contentType: 'text/plain; charset=utf-8',
+        'Content-Type': 'text/plain; charset=utf-8',
       },
     });
-  } catch (error) {
-    console.log(error);
+  } catch (error: unknown) {
+    console.error('Chat action error:', error);
 
-    throw new Response(null, {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    const isRateLimit = message.toLowerCase().includes('rate limit') || message.toLowerCase().includes('429');
+    const isAuth = message.toLowerCase().includes('auth') || message.toLowerCase().includes('api key') || message.toLowerCase().includes('401');
+
+    if (isRateLimit) {
+      throw new Response('Rate limit exceeded. Please wait before sending another message.', {
+        status: 429,
+        statusText: 'Too Many Requests',
+      });
+    }
+
+    if (isAuth) {
+      throw new Response('Invalid or missing API key for the selected provider.', {
+        status: 401,
+        statusText: 'Unauthorized',
+      });
+    }
+
+    throw new Response(`Chat error: ${message}`, {
       status: 500,
       statusText: 'Internal Server Error',
     });

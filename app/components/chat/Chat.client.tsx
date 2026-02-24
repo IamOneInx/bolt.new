@@ -2,14 +2,16 @@ import { useStore } from '@nanostores/react';
 import type { Message } from 'ai';
 import { useChat } from 'ai/react';
 import { useAnimate } from 'framer-motion';
-import { memo, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { cssTransition, toast, ToastContainer } from 'react-toastify';
-import { useMessageParser, usePromptEnhancer, useShortcuts, useSnapScroll } from '~/lib/hooks';
+import { useMessageParser, useModelDiscovery, usePromptEnhancer, useShortcuts, useSnapScroll } from '~/lib/hooks';
 import { useChatHistory } from '~/lib/persistence';
 import { chatStore } from '~/lib/stores/chat';
+import { tokenUsageStore, updateTokenUsage } from '~/lib/stores/token-usage';
 import { workbenchStore } from '~/lib/stores/workbench';
 import { fileModificationsToHTML } from '~/utils/diff';
 import { cubicEasingFn } from '~/utils/easings';
+import { DEFAULT_MODEL, DEFAULT_PROVIDER, MODEL_REGEX, PROVIDER_REGEX } from '~/utils/constants';
 import { createScopedLogger, renderLogger } from '~/utils/logger';
 import { BaseChat } from './BaseChat';
 
@@ -37,9 +39,6 @@ export function Chat() {
           );
         }}
         icon={({ type }) => {
-          /**
-           * @todo Handle more types if we need them. This may require extra color palettes.
-           */
           switch (type) {
             case 'success': {
               return <div className="i-ph:check-bold text-bolt-elements-icon-success text-2xl" />;
@@ -64,25 +63,44 @@ interface ChatProps {
   storeMessageHistory: (messages: Message[]) => Promise<void>;
 }
 
+function getStoredApiKeys(): Record<string, string> {
+  try {
+    return JSON.parse(localStorage.getItem('bolt_api_keys') ?? '{}');
+  } catch {
+    return {};
+  }
+}
+
 export const ChatImpl = memo(({ initialMessages, storeMessageHistory }: ChatProps) => {
   useShortcuts();
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const [chatStarted, setChatStarted] = useState(initialMessages.length > 0);
+  const [selectedProvider, setSelectedProvider] = useState(DEFAULT_PROVIDER.name);
+  const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL);
+  const { providers: dynamicProviders, discovering } = useModelDiscovery();
 
   const { showChat } = useStore(chatStore);
+  const tokenUsage = useStore(tokenUsageStore);
 
   const [animationScope, animate] = useAnimate();
 
   const { messages, isLoading, input, handleInputChange, setInput, stop, append } = useChat({
     api: '/api/chat',
+    body: {
+      apiKeys: getStoredApiKeys(),
+    },
     onError: (error) => {
       logger.error('Request failed\n\n', error);
-      toast.error('There was an error processing your request');
+      toast.error(error.message || 'There was an error processing your request');
     },
-    onFinish: () => {
+    onFinish: (message) => {
       logger.debug('Finished streaming');
+
+      // Estimate token usage (~4 chars per token)
+      const estimatedTokens = Math.ceil(message.content.length / 4);
+      updateTokenUsage({ completionTokens: estimatedTokens, totalTokens: estimatedTokens });
     },
     initialMessages,
   });
@@ -153,13 +171,6 @@ export const ChatImpl = memo(({ initialMessages, storeMessageHistory }: ChatProp
       return;
     }
 
-    /**
-     * @note (delm) Usually saving files shouldn't take long but it may take longer if there
-     * many unsaved files. In that case we need to block user input and show an indicator
-     * of some kind so the user is aware that something is happening. But I consider the
-     * happy case to be no unsaved files and I would expect users to save their changes
-     * before they send another message.
-     */
     await workbenchStore.saveAllFiles();
 
     const fileModifications = workbenchStore.getFileModifcations();
@@ -168,25 +179,20 @@ export const ChatImpl = memo(({ initialMessages, storeMessageHistory }: ChatProp
 
     runAnimation();
 
+    // Prepend model/provider tags so the server knows which model to use
+    const modelPrefix = `[Model: ${selectedModel}]\n\n[Provider: ${selectedProvider}]\n\n`;
+
+    // Estimate prompt tokens
+    updateTokenUsage({ promptTokens: Math.ceil(_input.length / 4), totalTokens: Math.ceil(_input.length / 4) });
+
     if (fileModifications !== undefined) {
       const diff = fileModificationsToHTML(fileModifications);
 
-      /**
-       * If we have file modifications we append a new user message manually since we have to prefix
-       * the user input with the file modifications and we don't want the new user input to appear
-       * in the prompt. Using `append` is almost the same as `handleSubmit` except that we have to
-       * manually reset the input and we'd have to manually pass in file attachments. However, those
-       * aren't relevant here.
-       */
-      append({ role: 'user', content: `${diff}\n\n${_input}` });
+      append({ role: 'user', content: `${modelPrefix}${diff}\n\n${_input}` });
 
-      /**
-       * After sending a new message we reset all modifications since the model
-       * should now be aware of all the changes.
-       */
       workbenchStore.resetAllFileModifications();
     } else {
-      append({ role: 'user', content: _input });
+      append({ role: 'user', content: `${modelPrefix}${_input}` });
     }
 
     setInput('');
@@ -213,9 +219,20 @@ export const ChatImpl = memo(({ initialMessages, storeMessageHistory }: ChatProp
       scrollRef={scrollRef}
       handleInputChange={handleInputChange}
       handleStop={abort}
+      selectedProvider={selectedProvider}
+      selectedModel={selectedModel}
+      onProviderChange={setSelectedProvider}
+      onModelChange={setSelectedModel}
+      tokenUsage={tokenUsage}
+      providerList={dynamicProviders}
+      discovering={discovering}
       messages={messages.map((message, i) => {
         if (message.role === 'user') {
-          return message;
+          return {
+            ...message,
+            // Strip model/provider prefix from displayed user messages
+            content: message.content.replace(MODEL_REGEX, '').replace(PROVIDER_REGEX, ''),
+          };
         }
 
         return {
