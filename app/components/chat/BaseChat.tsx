@@ -75,8 +75,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
   ) => {
     const TEXTAREA_MAX_HEIGHT = chatStarted ? 400 : 200;
 
-    const currentProviderModels =
-      providerList.find((p) => p.name === selectedProvider)?.staticModels ?? [];
+    const currentProviderModels = providerList.find((p) => p.name === selectedProvider)?.staticModels ?? [];
 
     const handleProviderChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
       const newProvider = e.target.value;
@@ -84,6 +83,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
 
       // Auto-select first model of new provider
       const firstModel = PROVIDER_LIST.find((p) => p.name === newProvider)?.staticModels[0];
+
       if (firstModel) {
         onModelChange?.(firstModel.name);
       }
@@ -160,7 +160,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                       minHeight: TEXTAREA_MIN_HEIGHT,
                       maxHeight: TEXTAREA_MAX_HEIGHT,
                     }}
-                    placeholder="How can Bolt help you today?"
+                    placeholder="What should we build today?"
                     translate="no"
                   />
                   <ClientOnly>
@@ -244,7 +244,10 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                     <div className="flex items-center gap-3">
                       {/* Token usage display */}
                       {tokenUsage && tokenUsage.totalTokens > 0 && (
-                        <div className="text-xs text-bolt-elements-textTertiary" title="Estimated token usage this session">
+                        <div
+                          className="text-xs text-bolt-elements-textTertiary"
+                          title="Estimated token usage this session"
+                        >
                           ~{tokenUsage.totalTokens.toLocaleString()} tokens
                         </div>
                       )}
